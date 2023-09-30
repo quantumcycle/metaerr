@@ -171,3 +171,11 @@ func TestWrappingNilErrorReturnsNil(t *testing.T) {
 
 	a.Nil(err)
 }
+
+func TestGetLocation(t *testing.T) {
+	a := assert.New(t)
+
+	err := CreateError("", nil)
+
+	a.Regexp(fmt.Sprintf(`.+/metaerr/errors_test.go:%d`, createErrorLocation), err.Location())
+}
