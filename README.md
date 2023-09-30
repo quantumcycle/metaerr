@@ -1,5 +1,9 @@
 # MetaErr
 
+[![GoDoc](https://pkg.go.dev/badge/github.com/quantumcycle/metaerr)](https://pkg.go.dev/github.com/quantumcycle/metaerr?tab=doc)
+[![Go Report Card](https://goreportcard.com/badge/github.com/quantumcycle/metaerr)](https://goreportcard.com/report/github.com/quantumcycle/metaerr)
+[![codecov](https://codecov.io/gh/quantumcycle/metaerr/graph/badge.svg?token=3EFILQUGE9)](https://codecov.io/gh/quantumcycle/metaerr)
+
 Metaerr is a golang package to create or wrap errors with custom metadata and location.
 
 ## Why
