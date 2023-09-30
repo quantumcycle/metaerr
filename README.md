@@ -8,11 +8,11 @@ Metaerr is a golang package to create or wrap errors with custom metadata and lo
 
 ## Why
 
-I was using github.com/pkg/errors before and the stacktraces were huge and not really useful. Then I found the [Fault library](https://github.com/Southclaws/fault) which was amazing, but the usage I wanted to do was at odd with some of the opinions built into the library.
+I used github.com/pkg/errors before, and the stack traces were extensive (like Java) and not very useful. Then, I came across the [Fault library](https://github.com/Southclaws/fault), which was amazing, but the way I wanted to use it clashed with some of the opinions embedded in the library.
 
-This is why I decided to write this simple library. It uses the same "stacktrace" models as `Fault`, in the sense that the stack you will see if the locations of the errors (and wrapped errors) creation, and not the stacktrace that led to the creation of the error.
+This is why I decided to create this simple library. It utilizes the same "stack trace" model as Fault, in the sense that you will see the stack pertaining to the locations of error creation, and not the stack trace that led to the error's creation.
 
-And the next feature it provides is the ability to add any number of key/pair metadata entries to each error (and wrapped errors). This is useful if you want to attach metadata at error create and then leverage that metadata at resolution. A common use case is to have a generic http error handler for an API that would leverage the metadata to determine the http status or build an error payload to be sent to the user. Another use case would be logging and alerting. If you convert the metadata into fields in a JSON logger, you could have different alerting rules for logged ERRORS based on the metadata, for example, errors with the metadata `tag` containing "security" could raise a immediate alert.
+The next feature it offers is the ability to add any number of key-value metadata entries to each error, including wrapped errors. This is useful if you want to attach metadata at the time of error creation and then leverage that metadata during resolution. A common use case is having a generic HTTP error handler for an API that can use the metadata to determine the HTTP status or construct an error payload to send to the user. Another use case would be logging and alerting. If you convert the metadata into fields in a JSON logger, you could have different alerting rules for logged ERRORS based on the metadata; for example, errors with the metadata tag containing "security" could trigger an immediate alert.
 
 ## Install
 
@@ -22,7 +22,7 @@ go get -u github.com/quantumcycle/metaerr
 
 ## Usage
 
-Metaerr can be used with golang standard errors package. They are also compatible with error wrapping introduced in Go 1.13.
+Metaerr can be used with the Go standard errors package, and they are also compatible with error wrapping introduced in Go 1.13.
 
 To create an new MetaErr from a string, use
 
@@ -36,7 +36,7 @@ To create a new MetaErr by wrapping an existing error, use
 err := metaerr.Wrap(err, "failure")
 ```
 
-The next step once you have a Metaerr is to add metadata to it. The first step is to create a function matching the `metaerr.ErrorMetadata` signature. For your convenience, you can use `metaerr.StringMeta`, but you can also create your own. Ultimately, all metadata entries are stored as string.
+The next step, once you have a Metaerr, is to add metadata to it. You need to create a function that matches the `metaerr.ErrorMetadata` signature. For your convenience, you can use `metaerr.StringMeta`, but you can also create your own. Ultimately, all metadata entries are stored as strings.
 
 ```golang
 //Create an metadata called ErrorCode
@@ -79,7 +79,7 @@ for k, values := range meta {
 
 ### Options
 
-You can provide options to alter the errors on creation. At the moment there is a single option, `WithLocationSkip`. By default when creating an error, Metaerr will skip 2 call stack to determine the error creation location. This works well if you call metaerr directly at the place where the error is created. However there is a use case where you want to create an error factory for some common use case, to initialize the error with some common metadata. In this case, if you use the standard `metaerr.New`, the reported location will be the line where `metaerr.New` is called, which will be in your error factory method. This is probably not what you want. In this case, you can use the `metaerr.WithLocationSkip` option to add additional call stack skip to determine the location. Here is an example:
+You can provide options to modify the errors during creation. Currently, there is a single option called `WithLocationSkip`. By default, when creating an error, Metaerr will skip 2 call stack frames to determine the error's creation location. This works well when you call Metaerr directly at the place where the error is created in your codebase. However, there is a use case where you might want to create an error factory function for common scenarios to initialize the error with some standard metadata. In this case, if you use the standard `metaerr.New` function, the reported location will be the line where `metaerr.New` is called, which may be within your error factory function. You probably don't want to have all your locations pointing to the same line. To address this, you can use the `metaerr.WithLocationSkip` option to add additional call stack skips to determine the location. Here is an example:
 
 ```golang
 package main
@@ -110,4 +110,4 @@ no such table [User] [tag=database]
         at /home/matdurand/sources/github/quantumcycle/metaerr/cmd/main.go:16
 ```
 
-Without the `WithLocationSkip` option, the reported location would be line 12, inside the `CreateDatabaseError` function. having all our errors pointing to this specific line would ne useless.
+Without the `WithLocationSkip` option, the reported location would be line 12, inside the `CreateDatabaseError` function. Having all our errors pointing to this specific line would ne useless.
