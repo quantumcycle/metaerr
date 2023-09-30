@@ -14,6 +14,12 @@ This is why I decided to write this simple library. It uses the same "stacktrace
 
 And the next feature it provides is the ability to add any number of key/pair metadata entries to each error (and wrapped errors). This is useful if you want to attach metadata at error create and then leverage that metadata at resolution. A common use case is to have a generic http error handler for an API that would leverage the metadata to determine the http status or build an error payload to be sent to the user. Another use case would be logging and alerting. If you convert the metadata into fields in a JSON logger, you could have different alerting rules for logged ERRORS based on the metadata, for example, errors with the metadata `tag` containing "security" could raise a immediate alert.
 
+## Install
+
+```
+go get -u github.com/quantumcycle/metaerr
+```
+
 ## Usage
 
 Metaerr can be used with golang standard errors package. They are also compatible with error wrapping introduced in Go 1.13.
