@@ -48,7 +48,7 @@ func Wrap(err error, msg string, opt ...Option) *Error {
 	}
 
 	e := Error{
-		reason: 	msg,
+		reason:   msg,
 		location: getLocation(defaultCallerSkip),
 		cause:    err,
 	}
@@ -121,16 +121,27 @@ func (e Error) Location() string {
 	return e.location
 }
 
+func getError(err error) (Error, bool) {
+	if metaError, ok := err.(Error); ok {
+		return metaError, true
+	}
+	if metaErrorPtr, ok := err.(*Error); ok {
+		return *metaErrorPtr, true
+	}
+	return Error{}, false
+}
+
 func (e Error) Format(s fmt.State, verb rune) {
 	var err error = e
 	switch verb {
 	case 'v':
+		var firstLine = true
 		for err != nil {
 			var message string = err.Error()
-			var location string = "[no location]"
+			var location string = ""
 			var metaMsg string = ""
 
-			if metaError, ok := err.(Error); ok {
+			if metaError, ok := getError(err); ok {
 				if s.Flag('+') {
 					if len(metaError.meta) > 0 {
 						metasStr := make([]string, 0, len(metaError.meta))
@@ -147,10 +158,22 @@ func (e Error) Format(s fmt.State, verb rune) {
 					}
 				}
 			}
-			if message == "" {
-				message = "[no message]"
+			if message != "" || metaMsg != "" {
+				if !firstLine {
+					fmt.Fprintf(s, "\n")
+				}
+				fmt.Fprintf(s, "%s%s", message, metaMsg)
+				firstLine = false
 			}
-			fmt.Fprintf(s, "%s%s\n\tat %s\n", message, metaMsg, location)
+
+			if location != "" {
+				if !firstLine {
+					fmt.Fprintf(s, "\n")
+				}
+				fmt.Fprintf(s, "\tat %s", location)
+				firstLine = false
+			}
+
 			err = stderr.Unwrap(err)
 		}
 	case 's':
