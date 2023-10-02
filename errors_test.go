@@ -57,7 +57,7 @@ func TestFormatWithoutMeta(t *testing.T) {
 	a.Regexp(fmt.Sprintf(`failure
 \s+at.+/metaerr/errors_test.go:%d
 `, createErrorLocation),
-		fmt.Sprintf("%+v", err))
+		fmt.Sprintf("%+v\n", err))
 }
 
 func TestFormatWithMeta(t *testing.T) {
@@ -72,7 +72,7 @@ func TestFormatWithMeta(t *testing.T) {
 	a.Regexp(fmt.Sprintf(`failure \[errorCode=code1, code2\] \[tag=not_found\]
 \s+at.+/metaerr/errors_test.go:%d
 `, createErrorLocation),
-		fmt.Sprintf("%+v", err))
+		fmt.Sprintf("%+v\n", err))
 }
 
 func TestFormatWithWrappedMetaError(t *testing.T) {
@@ -87,7 +87,7 @@ func TestFormatWithWrappedMetaError(t *testing.T) {
 failure
 \s+at.+/metaerr/errors_test.go:%d
 `, wrapErrorLocation, createErrorLocation),
-		fmt.Sprintf("%+v", wrapped))
+		fmt.Sprintf("%+v\n", wrapped))
 }
 
 func TestFormatWithWrappedStdError(t *testing.T) {
@@ -100,9 +100,8 @@ func TestFormatWithWrappedStdError(t *testing.T) {
 	a.Regexp(fmt.Sprintf(`wrapped
 \s+at.+/metaerr/errors_test.go:%d
 failure
-\s+at.+\[no location\]
 `, wrapErrorLocation),
-		fmt.Sprintf("%+v", wrapped))
+		fmt.Sprintf("%+v\n", wrapped))
 }
 
 func TestFormatLocationWhenCreatedFromLibraryOrHelperFunction(t *testing.T) {
@@ -114,7 +113,7 @@ func TestFormatLocationWhenCreatedFromLibraryOrHelperFunction(t *testing.T) {
 	a.Regexp(fmt.Sprintf(`failure
 \s+at.+/metaerr/errors_test.go:%d
 `, simulateCreateFromLibraryLocation),
-		fmt.Sprintf("%+v", err))
+		fmt.Sprintf("%+v\n", err))
 }
 
 func TestFormatLocationWhenWrappedFromLibraryOrHelperFunction(t *testing.T) {
@@ -127,7 +126,7 @@ func TestFormatLocationWhenWrappedFromLibraryOrHelperFunction(t *testing.T) {
 	a.Regexp(fmt.Sprintf(`unknown failure
 \s+at.+/metaerr/errors_test.go:%d
 `, simulateWrapFromLibraryLocation),
-		fmt.Sprintf("%+v", wrapped))
+		fmt.Sprintf("%+v\n", wrapped))
 }
 
 func TestFormatAsStringOnlyDisplayError(t *testing.T) {
@@ -139,17 +138,34 @@ func TestFormatAsStringOnlyDisplayError(t *testing.T) {
 	a.Equal("failure", fmt.Sprintf("%s", err))
 }
 
-func TestFormatDefaultToNoMessageWhenNoReasonProvided(t *testing.T) {
+func TestFormatWithoutMessage(t *testing.T) {
 	a := assert.New(t)
 
 	err := CreateError("", nil)
 
 	a.Equal("", err.Error())
 	a.Equal("", fmt.Sprintf("%s", err))
-	a.Regexp(fmt.Sprintf(`\[no message\]
-\s+at.+/metaerr/errors_test.go:%d
+	s := fmt.Sprintf("%+v\n", err)
+	fmt.Println(s)
+	a.Regexp(fmt.Sprintf(`\s+at.+/metaerr/errors_test.go:%d
 `, createErrorLocation),
-		fmt.Sprintf("%+v", err))
+		fmt.Sprintf("%+v\n", err))
+}
+
+func TestFormatMultipleWrappedWithoutMessage(t *testing.T) {
+	a := assert.New(t)
+
+	err := CreateError("", nil)
+	err2 := Wrap(err, "")
+	err3 := Wrap(err2, "root")
+
+	a.Regexp(fmt.Sprintf(`root
+\s+at.+/metaerr/errors_test.go:%d
+\s+at.+/metaerr/errors_test.go:%d
+\s+at.+/metaerr/errors_test.go:%d
+`, wrapErrorLocation, wrapErrorLocation, createErrorLocation),
+		fmt.Sprintf("%+v\n", err3))
+
 }
 
 func TestGetMetaReturnsMergeMetaFromWrappedErrors(t *testing.T) {
@@ -221,4 +237,13 @@ func TestStringerMeta(t *testing.T) {
 		"mymeta": {"value1"},
 	}, errMetaValues)
 
+}
+
+func TestStandardWrapping(t *testing.T) {
+	a := assert.New(t)
+
+	err := metaerr.New("failure")
+	wrapped := fmt.Errorf("wrapped: %w", err)
+
+	a.Equal("wrapped: failure", wrapped.Error())
 }
