@@ -22,6 +22,19 @@ func StringMeta(name string) func(val string) ErrorMetadata {
 	}
 }
 
+func StringerMeta[T fmt.Stringer](name string) func(val T) ErrorMetadata {
+	return func(val T) ErrorMetadata {
+		return func(err Error) []MetaValue {
+			return []MetaValue{
+				{
+					Name:   name,
+					Values: []string{val.String()},
+				},
+			}
+		}
+	}
+}
+
 type MetaValue struct {
 	Name   string
 	Values []string

@@ -179,3 +179,23 @@ func TestGetLocation(t *testing.T) {
 
 	a.Regexp(fmt.Sprintf(`.+/metaerr/errors_test.go:%d`, createErrorLocation), err.Location())
 }
+
+type MyMetaValue string
+
+func (m MyMetaValue) String() string { return string(m) }
+
+var MetaValue1 MyMetaValue = "value1"
+
+func TestStringerMeta(t *testing.T) {
+	a := assert.New(t)
+
+	meta := metaerr.StringerMeta[MyMetaValue]("mymeta")
+	err := metaerr.New("failure").Meta(meta(MetaValue1))
+
+	errMetaValues := metaerr.GetMeta(err, false)
+
+	a.Equal(map[string][]string{
+		"mymeta": {"value1"},
+	}, errMetaValues)
+
+}
