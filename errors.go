@@ -42,16 +42,24 @@ type MetaValue struct {
 
 type ErrorMetadata = func(err Error) []MetaValue
 
-func Wrap(err error, msg string) *Error {
+func Wrap(err error, msg string, opt ...Option) *Error {
 	if err == nil {
 		return nil
 	}
 
-	return &Error{
-		reason:   msg,
+	e := Error{
+		reason: 	msg,
 		location: getLocation(defaultCallerSkip),
 		cause:    err,
 	}
+
+	if len(opt) > 0 {
+		for _, o := range opt {
+			o(&e)
+		}
+	}
+
+	return &e
 }
 
 func GetMeta(err error, nested bool) map[string][]string {
@@ -162,21 +170,18 @@ func WithLocationSkip(additionalCallerSkip int) Option {
 }
 
 func New(reason string, opt ...Option) Error {
-	if len(opt) > 0 {
-		e := Error{
-			reason: reason,
-		}
-		for _, o := range opt {
-			o(&e)
-		}
-		return e
-	}
-
-	// Default error construction
-	return Error{
+	e := Error{
 		reason:   reason,
 		location: getLocation(defaultCallerSkip),
 	}
+
+	if len(opt) > 0 {
+		for _, o := range opt {
+			o(&e)
+		}
+	}
+
+	return e
 }
 
 func getLocation(callerSkip int) string {
