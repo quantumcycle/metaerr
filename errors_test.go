@@ -34,9 +34,19 @@ func libraryCreateNew(reason string) metaerr.Error {
 	return metaerr.New(reason, metaerr.WithLocationSkip(1))
 }
 
+func SimulateWrapFromLibrary(err error, reason string) metaerr.Error {
+	//We create the error in a function but we want to reported location to be here instead
+	return libraryWrap(err, reason)
+}
+
+func libraryWrap(err error, reason string) metaerr.Error {
+	return *metaerr.Wrap(err, reason, metaerr.WithLocationSkip(1))
+}
+
 const createErrorLocation = 14
 const wrapErrorLocation = 25
 const simulateCreateFromLibraryLocation = 30
+const simulateWrapFromLibraryLocation = 39
 
 func TestFormatWithoutMeta(t *testing.T) {
 	a := assert.New(t)
@@ -105,6 +115,19 @@ func TestFormatLocationWhenCreatedFromLibraryOrHelperFunction(t *testing.T) {
 \s+at.+/metaerr/errors_test.go:%d
 `, simulateCreateFromLibraryLocation),
 		fmt.Sprintf("%+v", err))
+}
+
+func TestFormatLocationWhenWrappedFromLibraryOrHelperFunction(t *testing.T) {
+	a := assert.New(t)
+
+	err := stderr.New("failure")
+	wrapped := SimulateWrapFromLibrary(err, "unknown failure")
+
+	a.Equal("unknown failure", wrapped.Error())
+	a.Regexp(fmt.Sprintf(`unknown failure
+\s+at.+/metaerr/errors_test.go:%d
+`, simulateWrapFromLibraryLocation),
+		fmt.Sprintf("%+v", wrapped))
 }
 
 func TestFormatAsStringOnlyDisplayError(t *testing.T) {
