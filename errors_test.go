@@ -68,8 +68,8 @@ func TestFormatWithMeta(t *testing.T) {
 		"tag":       {"not_found"},
 	})
 
-	a.Equal("failure", err.Error())
-	a.Regexp(fmt.Sprintf(`failure \[errorCode=code1, code2\] \[tag=not_found\]
+	a.Equal("failure [errorCode=code1,code2] [tag=not_found]", err.Error())
+	a.Regexp(fmt.Sprintf(`failure \[errorCode=code1,code2\] \[tag=not_found\]
 \s+at.+/metaerr/errors_test.go:%d
 `, createErrorLocation),
 		fmt.Sprintf("%+v\n", err))
@@ -81,7 +81,7 @@ func TestFormatWithWrappedMetaError(t *testing.T) {
 	err := CreateError("failure", nil)
 	wrapped := Wrap(err, "wrapped")
 
-	a.Equal("wrapped", wrapped.Error())
+	a.Equal("wrapped: failure", wrapped.Error())
 	a.Regexp(fmt.Sprintf(`wrapped
 \s+at.+/metaerr/errors_test.go:%d
 failure
@@ -96,7 +96,7 @@ func TestFormatWithWrappedStdError(t *testing.T) {
 	err := stderr.New("failure")
 	wrapped := Wrap(err, "wrapped")
 
-	a.Equal("wrapped", wrapped.Error())
+	a.Equal("wrapped: failure", wrapped.Error())
 	a.Regexp(fmt.Sprintf(`wrapped
 \s+at.+/metaerr/errors_test.go:%d
 failure
@@ -122,11 +122,7 @@ func TestFormatLocationWhenWrappedFromLibraryOrHelperFunction(t *testing.T) {
 	err := stderr.New("failure")
 	wrapped := SimulateWrapFromLibrary(err, "unknown failure")
 
-	a.Equal("unknown failure", wrapped.Error())
-	a.Regexp(fmt.Sprintf(`unknown failure
-\s+at.+/metaerr/errors_test.go:%d
-`, simulateWrapFromLibraryLocation),
-		fmt.Sprintf("%+v\n", wrapped))
+	a.Equal("unknown failure: failure", wrapped.Error())
 }
 
 func TestFormatAsStringOnlyDisplayError(t *testing.T) {
@@ -246,4 +242,28 @@ func TestStandardWrapping(t *testing.T) {
 	wrapped := fmt.Errorf("wrapped: %w", err)
 
 	a.Equal("wrapped: failure", wrapped.Error())
+}
+
+func TestErrorStringIncludesMetadata(t *testing.T) {
+	a := assert.New(t)
+
+	err := CreateError("failure", map[string][]string{
+		"errorCode": {"code2", "code1"},
+		"tag":       {"not_found"},
+	})
+
+	a.Equal("failure [errorCode=code1,code2] [tag=not_found]", err.Error())
+}
+
+func TestFormatWrappedEmptyError(t *testing.T) {
+	a := assert.New(t)
+
+	err := stderr.New("")
+	wrapped := Wrap(err, "something went wrong")
+
+	a.Regexp(fmt.Sprintf(`something went wrong
+\s+at.+/metaerr/errors_test.go:%d
+`, wrapErrorLocation),
+		fmt.Sprintf("%+v\n", wrapped))
+
 }
