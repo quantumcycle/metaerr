@@ -1,9 +1,11 @@
 package metaerr
 
 import (
+	"bytes"
 	"errors"
 	stderr "errors"
 	"fmt"
+	"io"
 	"runtime"
 	"sort"
 	"strings"
@@ -114,6 +116,12 @@ func (e Error) Unwrap() error {
 }
 
 func (e Error) Error() string {
+	buf := new(bytes.Buffer)
+	e.printError(buf, false)
+	return buf.String()
+}
+
+func (e Error) Reason() string {
 	return e.reason
 }
 
@@ -131,53 +139,118 @@ func getError(err error) (Error, bool) {
 	return Error{}, false
 }
 
-func (e Error) Format(s fmt.State, verb rune) {
+type errorWriter interface {
+	Error(msg, metadata, location string)
+}
+
+type stackErrorWriter struct {
+	writer           io.Writer
+	firstLinePrinted bool
+}
+
+func (ew *stackErrorWriter) Error(msg, metadata, location string) {
+	if msg == "" && metadata == "" && location == "" {
+		return
+	}
+	if ew.firstLinePrinted {
+		fmt.Fprint(ew.writer, "\n")
+	}
+	if msg != "" {
+		fmt.Fprint(ew.writer, msg)
+		ew.firstLinePrinted = true
+	}
+
+	if metadata != "" {
+		if msg != "" {
+			fmt.Fprint(ew.writer, " ")
+		}
+		fmt.Fprint(ew.writer, metadata)
+		ew.firstLinePrinted = true
+	}
+
+	if location == "" {
+		return
+	}
+	if ew.firstLinePrinted {
+		fmt.Fprintf(ew.writer, "\n")
+	}
+	fmt.Fprintf(ew.writer, "\tat %s", location)
+	ew.firstLinePrinted = true
+}
+
+type lineErrorWriter struct {
+	writer            io.Writer
+	firstErrorPrinted bool
+}
+
+func (ew *lineErrorWriter) Error(msg, metadata, location string) {
+	if msg == "" && metadata == "" {
+		return
+	}
+	if ew.firstErrorPrinted {
+		fmt.Fprint(ew.writer, ": ")
+	}
+	if msg != "" {
+		fmt.Fprint(ew.writer, msg)
+		ew.firstErrorPrinted = true
+	}
+	if metadata != "" {
+		if msg != "" {
+			fmt.Fprint(ew.writer, " ")
+		}
+		fmt.Fprint(ew.writer, metadata)
+		ew.firstErrorPrinted = true
+	}
+}
+
+func (e Error) printError(w io.Writer, withLocation bool) {
 	var err error = e
+	var errWriter errorWriter
+	if withLocation {
+		errWriter = &stackErrorWriter{
+			writer: w,
+		}
+	} else {
+		errWriter = &lineErrorWriter{
+			writer: w,
+		}
+	}
+	for err != nil {
+		var message string = ""
+		var location string = ""
+		var metaMsg string = ""
+
+		if metaError, ok := getError(err); ok {
+			message = metaError.Reason()
+			if len(metaError.meta) > 0 {
+				metasStr := make([]string, 0, len(metaError.meta))
+				metas := GetMeta(metaError, false)
+				for k, v := range metas {
+					metasStr = append(metasStr, fmt.Sprintf("[%s=%s]", k, strings.Join(v, ",")))
+				}
+				//To make the output deterministic
+				sort.Strings(metasStr)
+				metaMsg = strings.Join(metasStr, " ")
+			}
+			if withLocation && metaError.location != "" {
+				location = metaError.location
+			}
+		} else {
+			message = err.Error()
+		}
+		errWriter.Error(message, metaMsg, location)
+		err = stderr.Unwrap(err)
+	}
+}
+
+func (e Error) Format(s fmt.State, verb rune) {
+	detailledPrint := s.Flag('+')
+
 	switch verb {
 	case 'v':
-		var firstLine = true
-		for err != nil {
-			var message string = err.Error()
-			var location string = ""
-			var metaMsg string = ""
-
-			if metaError, ok := getError(err); ok {
-				if s.Flag('+') {
-					if len(metaError.meta) > 0 {
-						metasStr := make([]string, 0, len(metaError.meta))
-						metas := GetMeta(metaError, false)
-						for k, v := range metas {
-							metasStr = append(metasStr, fmt.Sprintf("[%s=%s]", k, strings.Join(v, ", ")))
-						}
-						//To make the output deterministic
-						sort.Strings(metasStr)
-						metaMsg = fmt.Sprintf(" %s", strings.Join(metasStr, " "))
-					}
-					if metaError.location != "" {
-						location = metaError.location
-					}
-				}
-			}
-			if message != "" || metaMsg != "" {
-				if !firstLine {
-					fmt.Fprintf(s, "\n")
-				}
-				fmt.Fprintf(s, "%s%s", message, metaMsg)
-				firstLine = false
-			}
-
-			if location != "" {
-				if !firstLine {
-					fmt.Fprintf(s, "\n")
-				}
-				fmt.Fprintf(s, "\tat %s", location)
-				firstLine = false
-			}
-
-			err = stderr.Unwrap(err)
-		}
+		e.printError(s, detailledPrint)
 	case 's':
-		fmt.Fprint(s, e.Error())
+		e.printError(s, false)
 	}
 }
 
