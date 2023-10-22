@@ -79,7 +79,10 @@ for k, values := range meta {
 
 ### Options
 
-You can provide options to modify the errors during creation. Currently, there is a single option called `WithLocationSkip`. By default, when creating an error, Metaerr will skip 2 call stack frames to determine the error's creation location. This works well when you call Metaerr directly at the place where the error is created in your codebase. However, there is a use case where you might want to create an error factory function for common scenarios to initialize the error with some standard metadata. In this case, if you use the standard `metaerr.New` function, the reported location will be the line where `metaerr.New` is called, which may be within your error factory function. You probably don't want to have all your locations pointing to the same line. To address this, you can use the `metaerr.WithLocationSkip` option to add additional call stack skips to determine the location. Here is an example:
+You can provide options to modify the errors during creation. 
+
+#### WithLocationSkip
+By default, when creating an error, Metaerr will skip 2 call stack frames to determine the error's creation location. This works well when you call Metaerr directly at the place where the error is created in your codebase. However, there is a use case where you might want to create an error factory function for common scenarios to initialize the error with some standard metadata. In this case, if you use the standard `metaerr.New` function, the reported location will be the line where `metaerr.New` is called, which may be within your error factory function. You probably don't want to have all your locations pointing to the same line. To address this, you can use the `metaerr.WithLocationSkip` option to add additional call stack skips to determine the location. Here is an example:
 
 ```golang
 package main
@@ -107,7 +110,21 @@ which will output
 
 ```
 no such table [User] [tag=database]
-        at /home/matdurand/sources/github/quantumcycle/metaerr/cmd/main.go:16
+        at .../github.com/quantumcycle/metaerr/cmd/main.go:16
 ```
 
 Without the `WithLocationSkip` option, the reported location would be line 12, inside the `CreateDatabaseError` function. Having all our errors pointing to this specific line would ne useless.
+
+#### WithStacktrace
+
+Usually the error creation location is enough to get by and find the context during which the error was created, but if the error is created in some central location called from multiple places, it might be useful to have a stacktrace to be able to find the caller that led to the error creation.
+For these cases, use `WithStacktrace`, either when creating the error or when wrapping an existing error. When doing so, it will print something like this
+```
+failure
+	at .../github.com/quantumcycle/metaerr/errors_test.go:46
+	Stacktrace:
+		.../github.com/quantumcycle/metaerr/errors_test.go:64
+		.../github.com/quantumcycle/metaerr/errors_test.go:297
+```
+
+If you explore the unit test file, you will notice that the first line of the stacktrace is actually the error creation location, in this case, line 46 of the errors_test.go, but instead of repeating the same line twice, once for location and once at the start of the stacktrace, we skip it in the stacktrace.
