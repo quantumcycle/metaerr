@@ -96,18 +96,20 @@ func GetMeta(err error, nested bool) map[string][]string {
 }
 
 type Error struct {
-	reason   string
-	meta     []ErrorMetadata
-	location string
-	cause    error
+	reason     string
+	meta       []ErrorMetadata
+	location   string
+	cause      error
+	stacktrace *stacktrace
 }
 
 func (e Error) Meta(metas ...ErrorMetadata) Error {
 	return Error{
-		reason:   e.reason,
-		location: e.location,
-		cause:    e.cause,
-		meta:     append(e.meta, metas...),
+		reason:     e.reason,
+		location:   e.location,
+		cause:      e.cause,
+		stacktrace: e.stacktrace,
+		meta:       append(e.meta, metas...),
 	}
 }
 
@@ -140,7 +142,7 @@ func getError(err error) (Error, bool) {
 }
 
 type errorWriter interface {
-	Error(msg, metadata, location string)
+	Error(msg, metadata, location string, stacktrace *stacktrace)
 }
 
 type stackErrorWriter struct {
@@ -148,7 +150,7 @@ type stackErrorWriter struct {
 	firstLinePrinted bool
 }
 
-func (ew *stackErrorWriter) Error(msg, metadata, location string) {
+func (ew *stackErrorWriter) Error(msg, metadata, location string, st *stacktrace) {
 	if msg == "" && metadata == "" && location == "" {
 		return
 	}
@@ -176,6 +178,17 @@ func (ew *stackErrorWriter) Error(msg, metadata, location string) {
 	}
 	fmt.Fprintf(ew.writer, "\tat %s", location)
 	ew.firstLinePrinted = true
+
+	if st != nil {
+		fmt.Fprintf(ew.writer, "\n\tStacktrace:\n")
+		for i, frame := range st.frames {
+			fmt.Fprintf(ew.writer, "\t\t%s", frame.String())
+			if i < len(st.frames)-1 {
+				fmt.Fprintf(ew.writer, "\n")
+			}
+		}
+	}
+
 }
 
 type lineErrorWriter struct {
@@ -183,7 +196,7 @@ type lineErrorWriter struct {
 	firstErrorPrinted bool
 }
 
-func (ew *lineErrorWriter) Error(msg, metadata, location string) {
+func (ew *lineErrorWriter) Error(msg, metadata, location string, st *stacktrace) {
 	if msg == "" && metadata == "" {
 		return
 	}
@@ -219,6 +232,7 @@ func (e Error) printError(w io.Writer, withLocation bool) {
 		var message string = ""
 		var location string = ""
 		var metaMsg string = ""
+		var st *stacktrace
 
 		if metaError, ok := getError(err); ok {
 			message = metaError.Reason()
@@ -235,10 +249,13 @@ func (e Error) printError(w io.Writer, withLocation bool) {
 			if withLocation && metaError.location != "" {
 				location = metaError.location
 			}
+			if withLocation && metaError.stacktrace != nil {
+				st = metaError.stacktrace
+			}
 		} else {
 			message = err.Error()
 		}
-		errWriter.Error(message, metaMsg, location)
+		errWriter.Error(message, metaMsg, location, st)
 		err = stderr.Unwrap(err)
 	}
 }
@@ -262,6 +279,14 @@ func WithLocationSkip(additionalCallerSkip int) Option {
 	return func(e *Error) {
 		//+1 since this is called from the option
 		e.location = getLocation(additionalCallerSkip + defaultCallerSkip + 1)
+	}
+}
+
+func WithStackTrace(additionalCallerSkip, maxDepth int) Option {
+	return func(e *Error) {
+		//+1 since this is called from the option
+		//+1 because we always skip the first frame since it will be the same as the location
+		e.stacktrace = newStacktrace(additionalCallerSkip+defaultCallerSkip+2, maxDepth)
 	}
 }
 

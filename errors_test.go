@@ -34,6 +34,15 @@ func libraryCreateNew(reason string) metaerr.Error {
 	return metaerr.New(reason, metaerr.WithLocationSkip(1))
 }
 
+func SimulateCreateFromLibraryWithStack(reason string) metaerr.Error {
+	//We create the error in a function but we want to reported location to be here instead
+	return libraryCreateNewWithStack(reason)
+}
+
+func libraryCreateNewWithStack(reason string) metaerr.Error {
+	return metaerr.New(reason, metaerr.WithLocationSkip(1), metaerr.WithStackTrace(1, 3))
+}
+
 func SimulateWrapFromLibrary(err error, reason string) metaerr.Error {
 	//We create the error in a function but we want to reported location to be here instead
 	return libraryWrap(err, reason)
@@ -43,10 +52,16 @@ func libraryWrap(err error, reason string) metaerr.Error {
 	return *metaerr.Wrap(err, reason, metaerr.WithLocationSkip(1))
 }
 
+// Same as SimulateCreateFromLibraryWithStack, but with an additional stack frame we want to assert on
+func SimulateCreateFromLibraryWithStackLevel2(reason string) metaerr.Error {
+	return SimulateCreateFromLibraryWithStack(reason)
+}
+
 const createErrorLocation = 14
 const wrapErrorLocation = 25
 const simulateCreateFromLibraryLocation = 30
-const simulateWrapFromLibraryLocation = 39
+const simulateCreateFromLibraryWithStackLocation = 39
+const simulateCreateFromLibraryWithStackLevel2Location = 57
 
 func TestFormatWithoutMeta(t *testing.T) {
 	a := assert.New(t)
@@ -141,8 +156,6 @@ func TestFormatWithoutMessage(t *testing.T) {
 
 	a.Equal("", err.Error())
 	a.Equal("", fmt.Sprintf("%s", err))
-	s := fmt.Sprintf("%+v\n", err)
-	fmt.Println(s)
 	a.Regexp(fmt.Sprintf(`\s+at.+/metaerr/errors_test.go:%d
 `, createErrorLocation),
 		fmt.Sprintf("%+v\n", err))
@@ -266,4 +279,20 @@ func TestFormatWrappedEmptyError(t *testing.T) {
 `, wrapErrorLocation),
 		fmt.Sprintf("%+v\n", wrapped))
 
+}
+
+func TestErrorWithStacktrace(t *testing.T) {
+	a := assert.New(t)
+
+	err := SimulateCreateFromLibraryWithStackLevel2("failure")
+
+	a.Regexp(fmt.Sprintf(`failure
+\s+at.+/metaerr/errors_test.go:%d
+\s+Stacktrace:
+\s+.+/metaerr/errors_test.go:%d
+\s+.+/metaerr/errors_test.go:.*
+`,
+		simulateCreateFromLibraryWithStackLocation,
+		simulateCreateFromLibraryWithStackLevel2Location),
+		fmt.Sprintf("%+v\n", err))
 }
