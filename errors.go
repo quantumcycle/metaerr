@@ -179,10 +179,10 @@ func (ew *stackErrorWriter) Error(msg, metadata, location string, st *stacktrace
 	fmt.Fprintf(ew.writer, "\tat %s", location)
 	ew.firstLinePrinted = true
 
-	if st != nil {
-		fmt.Fprintf(ew.writer, "\n\tStacktrace:\n")
+	if st != nil && len(st.frames) > 0 {
+		fmt.Fprintf(ew.writer, "\n")
 		for i, frame := range st.frames {
-			fmt.Fprintf(ew.writer, "\t\t%s", frame.String())
+			fmt.Fprintf(ew.writer, "\tat %s", frame.String())
 			if i < len(st.frames)-1 {
 				fmt.Fprintf(ew.writer, "\n")
 			}
