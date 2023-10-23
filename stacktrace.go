@@ -26,12 +26,9 @@ func newStacktrace(frameStackSkip, maxDepth int) *stacktrace {
 	// Frames from this package are skipped.
 	for i := frameStackSkip; len(frames) < maxDepth; i++ {
 		_, file, line, ok := runtime.Caller(i)
-		if !ok {
+		//Once we find a frame in the stdlib, we stop, since stdlib code won't call back to user code
+		if !ok || strings.Contains(file, runtime.GOROOT()) {
 			break
-		}
-		//Skip frames from the standard library
-		if strings.Contains(file, runtime.GOROOT()) {
-			continue
 		}
 
 		frames = append(frames, frame{
