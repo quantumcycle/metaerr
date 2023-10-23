@@ -288,7 +288,6 @@ func TestErrorWithStacktrace(t *testing.T) {
 
 	a.Regexp(fmt.Sprintf(`failure
 \s+at.+/metaerr/errors_test.go:%d
-\s+Stacktrace:
 \s+.+/metaerr/errors_test.go:%d
 \s+.+/metaerr/errors_test.go:.*
 `,
