@@ -58,6 +58,23 @@ failure
         at .../quantumcycle/metaerr/cmd/main.go:12
 ```
 
+### How to use this library in your project
+
+You can start with the example above, but if for example you want stacktraces, having this code everywhere is not really convenient
+
+```golang
+var ErrorCode = metaerr.StringMeta("error_code")
+
+...
+...
+...
+
+err := metaerr.New("failure", metaerr.WithStackTrace(0, 3)).Meta(ErrorCode("x01"))
+```
+
+To solve this, metaerr provides a base builder to help build your own error builder. You should create your own error builder in your project, adding any potential configuration options and metadata to the builder and then levering this to create your errors. 
+Look at [this file](./example/errors/builder.go) for an example of a builder with 2 possible metadata (errorCode and tags), and [this file](./example/main.go) as an example of using this builder.
+
 ### Getting the err message, location, and metadata
 
 In the example above, we use the Printf formatting to display the error, metadata and location all in one gulp. You can however use the provided helper function to get the individual parts

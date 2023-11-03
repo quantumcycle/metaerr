@@ -2,6 +2,7 @@ package metaerr
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	stderr "errors"
 	"fmt"
@@ -11,7 +12,7 @@ import (
 	"strings"
 )
 
-func StringMeta(name string) func(val string) ErrorMetadata {
+func StringMeta(name string) func(string) ErrorMetadata {
 	return func(val string) ErrorMetadata {
 		return func(err Error) []MetaValue {
 			return []MetaValue{
@@ -24,13 +25,52 @@ func StringMeta(name string) func(val string) ErrorMetadata {
 	}
 }
 
-func StringerMeta[T fmt.Stringer](name string) func(val T) ErrorMetadata {
-	return func(val T) ErrorMetadata {
+func StringFromContextMeta(name string, ctxKey string) func() ErrorMetadata {
+	return func() ErrorMetadata {
+		return func(err Error) []MetaValue {
+			ctx := err.Context()
+			if ctx == nil {
+				return nil
+			}
+			val := err.Context().Value(ctxKey)
+			if val == nil {
+				return nil
+			}
+			strVal := fmt.Sprintf("%v", val)
+			return []MetaValue{
+				{
+					Name:   name,
+					Values: []string{strVal},
+				},
+			}
+		}
+	}
+}
+
+func StringsMeta(name string) func(...string) ErrorMetadata {
+	return func(values ...string) ErrorMetadata {
 		return func(err Error) []MetaValue {
 			return []MetaValue{
 				{
 					Name:   name,
-					Values: []string{val.String()},
+					Values: values,
+				},
+			}
+		}
+	}
+}
+
+func StringerMeta[T fmt.Stringer](name string) func(T) ErrorMetadata {
+	return func(val T) ErrorMetadata {
+		return func(err Error) []MetaValue {
+			strVal := val.String()
+			if strVal == "" {
+				return nil
+			}
+			return []MetaValue{
+				{
+					Name:   name,
+					Values: []string{strVal},
 				},
 			}
 		}
@@ -73,10 +113,18 @@ func GetMeta(err error, nested bool) map[string][]string {
 			for _, m := range f.meta {
 				values := m(f)
 				for _, val := range values {
+					//ignore empty metadata
+					if len(val.Values) == 0 {
+						continue
+					}
 					if meta[val.Name] == nil {
 						meta[val.Name] = make([]string, 0, len(val.Values))
 					}
-					meta[val.Name] = append(meta[val.Name], val.Values...)
+					for _, v := range val.Values {
+						if v != "" {
+							meta[val.Name] = append(meta[val.Name], v)
+						}
+					}
 				}
 			}
 
@@ -96,6 +144,7 @@ func GetMeta(err error, nested bool) map[string][]string {
 }
 
 type Error struct {
+	context    context.Context
 	reason     string
 	meta       []ErrorMetadata
 	location   string
@@ -103,14 +152,30 @@ type Error struct {
 	stacktrace *stacktrace
 }
 
-func (e Error) Meta(metas ...ErrorMetadata) Error {
+func (e Error) WithMeta(metas ...ErrorMetadata) Error {
 	return Error{
 		reason:     e.reason,
 		location:   e.location,
 		cause:      e.cause,
 		stacktrace: e.stacktrace,
+		context:    e.context,
 		meta:       append(e.meta, metas...),
 	}
+}
+
+func (e Error) WithContext(ctx context.Context) Error {
+	return Error{
+		reason:     e.reason,
+		location:   e.location,
+		cause:      e.cause,
+		stacktrace: e.stacktrace,
+		meta:       e.meta,
+		context:    ctx,
+	}
+}
+
+func (e Error) Context() context.Context {
+	return e.context
 }
 
 func (e Error) Unwrap() error {
