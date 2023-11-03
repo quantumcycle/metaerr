@@ -1,6 +1,7 @@
 package metaerr_test
 
 import (
+	"context"
 	stderr "errors"
 	"fmt"
 	"testing"
@@ -14,7 +15,7 @@ func CreateError(reason string, meta map[string][]string) metaerr.Error {
 	err := metaerr.New(reason)
 	for k, values := range meta {
 		for _, val := range values {
-			err = err.Meta(metaerr.StringMeta(k)(val))
+			err = err.WithMeta(metaerr.StringMeta(k)(val))
 		}
 
 	}
@@ -57,11 +58,11 @@ func SimulateCreateFromLibraryWithStackLevel2(reason string) metaerr.Error {
 	return SimulateCreateFromLibraryWithStack(reason)
 }
 
-const createErrorLocation = 14
-const wrapErrorLocation = 25
-const simulateCreateFromLibraryLocation = 30
-const simulateCreateFromLibraryWithStackLocation = 39
-const simulateCreateFromLibraryWithStackLevel2Location = 57
+const createErrorLocation = 15
+const wrapErrorLocation = 26
+const simulateCreateFromLibraryLocation = 31
+const simulateCreateFromLibraryWithStackLocation = 40
+const simulateCreateFromLibraryWithStackLevel2Location = 58
 
 func TestFormatWithoutMeta(t *testing.T) {
 	a := assert.New(t)
@@ -185,7 +186,7 @@ func TestGetMetaReturnsMergeMetaFromWrappedErrors(t *testing.T) {
 		"tag":       {"not_found"},
 	})
 	wrapped := Wrap(err, "wrapped")
-	wrappedWithMeta := wrapped.Meta(metaerr.StringMeta("errorCode")("code3"))
+	wrappedWithMeta := wrapped.WithMeta(metaerr.StringMeta("errorCode")("code3"))
 
 	meta := metaerr.GetMeta(wrappedWithMeta, true)
 
@@ -203,7 +204,7 @@ func TestGetMetaReturnsNonNestedMeta(t *testing.T) {
 		"tag":       {"not_found"},
 	})
 	wrapped := Wrap(err, "wrapped")
-	wrappedWithMeta := wrapped.Meta(metaerr.StringMeta("errorCode")("code3"))
+	wrappedWithMeta := wrapped.WithMeta(metaerr.StringMeta("errorCode")("code3"))
 
 	meta := metaerr.GetMeta(wrappedWithMeta, false)
 
@@ -238,13 +239,51 @@ func TestStringerMeta(t *testing.T) {
 	a := assert.New(t)
 
 	meta := metaerr.StringerMeta[MyMetaValue]("mymeta")
-	err := metaerr.New("failure").Meta(meta(MetaValue1))
+	err := metaerr.New("failure").WithMeta(meta(MetaValue1))
 
 	errMetaValues := metaerr.GetMeta(err, false)
 
 	a.Equal(map[string][]string{
 		"mymeta": {"value1"},
 	}, errMetaValues)
+
+}
+
+func TestStringerMetaWithEmptyValue(t *testing.T) {
+	a := assert.New(t)
+
+	meta := metaerr.StringerMeta[MyMetaValue]("mymeta")
+	err := metaerr.New("failure").WithMeta(meta(""))
+
+	errMetaValues := metaerr.GetMeta(err, false)
+
+	a.Equal(map[string][]string{}, errMetaValues)
+
+}
+
+func TestStringsMeta(t *testing.T) {
+	a := assert.New(t)
+
+	meta := metaerr.StringsMeta("mymeta")
+	err := metaerr.New("failure").WithMeta(meta("v1", "v2"))
+
+	errMetaValues := metaerr.GetMeta(err, false)
+
+	a.Equal(map[string][]string{
+		"mymeta": {"v1", "v2"},
+	}, errMetaValues)
+
+}
+
+func TestStringsMetaWithoutValues(t *testing.T) {
+	a := assert.New(t)
+
+	meta := metaerr.StringsMeta("mymeta")
+	err := metaerr.New("failure").WithMeta(meta())
+
+	errMetaValues := metaerr.GetMeta(err, false)
+
+	a.Equal(map[string][]string{}, errMetaValues)
 
 }
 
@@ -294,4 +333,41 @@ func TestErrorWithStacktrace(t *testing.T) {
 		simulateCreateFromLibraryWithStackLocation,
 		simulateCreateFromLibraryWithStackLevel2Location),
 		fmt.Sprintf("%+v\n", err))
+}
+
+func TestErrorWithMetaFromContextWithValue(t *testing.T) {
+	a := assert.New(t)
+
+	ctx := context.WithValue(context.Background(), "user", "123")
+	userFromCtx := metaerr.StringFromContextMeta("user", "user")
+	err := metaerr.New("failure").WithContext(ctx).WithMeta(userFromCtx())
+
+	meta := metaerr.GetMeta(err, false)
+
+	a.Equal(map[string][]string{
+		"user": {"123"},
+	}, meta)
+}
+
+func TestErrorWithMetaFromContextWithoutValue(t *testing.T) {
+	a := assert.New(t)
+
+	ctx := context.Background()
+	userFromCtx := metaerr.StringFromContextMeta("user", "user")
+	err := metaerr.New("failure").WithContext(ctx).WithMeta(userFromCtx())
+
+	meta := metaerr.GetMeta(err, false)
+
+	a.Equal(map[string][]string{}, meta)
+}
+
+func TestErrorWithMetaFromContextWithoutContext(t *testing.T) {
+	a := assert.New(t)
+
+	userFromCtx := metaerr.StringFromContextMeta("user", "user")
+	err := metaerr.New("failure").WithMeta(userFromCtx())
+
+	meta := metaerr.GetMeta(err, false)
+
+	a.Equal(map[string][]string{}, meta)
 }
