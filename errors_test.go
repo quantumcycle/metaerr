@@ -372,3 +372,17 @@ func TestErrorWithMetaFromContextWithoutContext(t *testing.T) {
 
 	a.Equal(map[string][]string{}, meta)
 }
+
+func TestErrorWithMetaRemovedDuplicateValues(t *testing.T) {
+	a := assert.New(t)
+
+	tags := metaerr.StringsMeta("tags")
+	err := metaerr.New("failure", metaerr.WithMeta(tags("tag1", "tag2")))
+	wrapped := metaerr.Wrap(err, "wrapped", metaerr.WithMeta(tags("tag1")))
+
+	meta := metaerr.GetMeta(wrapped, true)
+
+	a.Equal(map[string][]string{
+		"tags": {"tag1", "tag2"},
+	}, meta)
+}

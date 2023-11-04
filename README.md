@@ -6,6 +6,8 @@
 
 Metaerr is a golang package to create or wrap errors with custom metadata and location.
 
+This library requires Golang 1.21+.
+
 ## Why
 
 I used github.com/pkg/errors before, and the stack traces were extensive (like Java) and not very useful. Then, I came across the [Fault library](https://github.com/Southclaws/fault), which was amazing, but the way I wanted to use it clashed with some of the opinions embedded in the library.

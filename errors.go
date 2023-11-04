@@ -8,6 +8,7 @@ import (
 	"io"
 	"reflect"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -56,8 +57,10 @@ func GetMeta(err error, nested bool) map[string][]string {
 			}
 
 			//sort all slices to make output deterministic
-			for _, v := range meta {
+			for k, v := range meta {
 				sort.Strings(v)
+				//remove consecutive duplicates
+				meta[k] = slices.Compact(v)
 			}
 		}
 
