@@ -3,96 +3,24 @@ package metaerr
 import (
 	"bytes"
 	"context"
-	"errors"
 	stderr "errors"
 	"fmt"
 	"io"
+	"reflect"
 	"runtime"
 	"sort"
 	"strings"
 )
 
-func StringMeta(name string) func(string) ErrorMetadata {
-	return func(val string) ErrorMetadata {
-		return func(err Error) []MetaValue {
-			return []MetaValue{
-				{
-					Name:   name,
-					Values: []string{val},
-				},
-			}
-		}
-	}
-}
-
-func StringFromContextMeta(name string, ctxKey string) func() ErrorMetadata {
-	return func() ErrorMetadata {
-		return func(err Error) []MetaValue {
-			ctx := err.Context()
-			if ctx == nil {
-				return nil
-			}
-			val := err.Context().Value(ctxKey)
-			if val == nil {
-				return nil
-			}
-			strVal := fmt.Sprintf("%v", val)
-			return []MetaValue{
-				{
-					Name:   name,
-					Values: []string{strVal},
-				},
-			}
-		}
-	}
-}
-
-func StringsMeta(name string) func(...string) ErrorMetadata {
-	return func(values ...string) ErrorMetadata {
-		return func(err Error) []MetaValue {
-			return []MetaValue{
-				{
-					Name:   name,
-					Values: values,
-				},
-			}
-		}
-	}
-}
-
-func StringerMeta[T fmt.Stringer](name string) func(T) ErrorMetadata {
-	return func(val T) ErrorMetadata {
-		return func(err Error) []MetaValue {
-			strVal := val.String()
-			if strVal == "" {
-				return nil
-			}
-			return []MetaValue{
-				{
-					Name:   name,
-					Values: []string{strVal},
-				},
-			}
-		}
-	}
-}
-
-type MetaValue struct {
-	Name   string
-	Values []string
-}
-
-type ErrorMetadata = func(err Error) []MetaValue
-
-func Wrap(err error, msg string, opt ...Option) *Error {
+func Wrap(err error, msg string, opt ...Option) error {
 	if err == nil {
 		return nil
 	}
 
 	e := Error{
-		reason:   msg,
-		location: getLocation(defaultCallerSkip),
-		cause:    err,
+		Reason:   msg,
+		Location: getLocation(0),
+		Cause:    err,
 	}
 
 	if len(opt) > 0 {
@@ -108,10 +36,9 @@ func GetMeta(err error, nested bool) map[string][]string {
 	meta := make(map[string][]string)
 
 	for err != nil {
-		var f Error
-		if errors.As(err, &f) {
-			for _, m := range f.meta {
-				values := m(f)
+		if metaErr, ok := AsMetaError(err); ok {
+			for _, m := range metaErr.Metas {
+				values := m(metaErr)
 				for _, val := range values {
 					//ignore empty metadata
 					if len(val.Values) == 0 {
@@ -144,42 +71,16 @@ func GetMeta(err error, nested bool) map[string][]string {
 }
 
 type Error struct {
-	context    context.Context
-	reason     string
-	meta       []ErrorMetadata
-	location   string
-	cause      error
-	stacktrace *stacktrace
-}
-
-func (e Error) WithMeta(metas ...ErrorMetadata) Error {
-	return Error{
-		reason:     e.reason,
-		location:   e.location,
-		cause:      e.cause,
-		stacktrace: e.stacktrace,
-		context:    e.context,
-		meta:       append(e.meta, metas...),
-	}
-}
-
-func (e Error) WithContext(ctx context.Context) Error {
-	return Error{
-		reason:     e.reason,
-		location:   e.location,
-		cause:      e.cause,
-		stacktrace: e.stacktrace,
-		meta:       e.meta,
-		context:    ctx,
-	}
-}
-
-func (e Error) Context() context.Context {
-	return e.context
+	Context    context.Context
+	Location   string
+	Reason     string
+	Stacktrace *Stacktrace
+	Cause      error
+	Metas      []ErrorMetadata
 }
 
 func (e Error) Unwrap() error {
-	return e.cause
+	return e.Cause
 }
 
 func (e Error) Error() string {
@@ -188,15 +89,7 @@ func (e Error) Error() string {
 	return buf.String()
 }
 
-func (e Error) Reason() string {
-	return e.reason
-}
-
-func (e Error) Location() string {
-	return e.location
-}
-
-func getError(err error) (Error, bool) {
+func AsMetaError(err error) (Error, bool) {
 	if metaError, ok := err.(Error); ok {
 		return metaError, true
 	}
@@ -204,81 +97,6 @@ func getError(err error) (Error, bool) {
 		return *metaErrorPtr, true
 	}
 	return Error{}, false
-}
-
-type errorWriter interface {
-	Error(msg, metadata, location string, stacktrace *stacktrace)
-}
-
-type stackErrorWriter struct {
-	writer           io.Writer
-	firstLinePrinted bool
-}
-
-func (ew *stackErrorWriter) Error(msg, metadata, location string, st *stacktrace) {
-	if msg == "" && metadata == "" && location == "" {
-		return
-	}
-	if ew.firstLinePrinted {
-		fmt.Fprint(ew.writer, "\n")
-	}
-	if msg != "" {
-		fmt.Fprint(ew.writer, msg)
-		ew.firstLinePrinted = true
-	}
-
-	if metadata != "" {
-		if msg != "" {
-			fmt.Fprint(ew.writer, " ")
-		}
-		fmt.Fprint(ew.writer, metadata)
-		ew.firstLinePrinted = true
-	}
-
-	if location == "" {
-		return
-	}
-	if ew.firstLinePrinted {
-		fmt.Fprintf(ew.writer, "\n")
-	}
-	fmt.Fprintf(ew.writer, "\tat %s", location)
-	ew.firstLinePrinted = true
-
-	if st != nil && len(st.frames) > 0 {
-		fmt.Fprintf(ew.writer, "\n")
-		for i, frame := range st.frames {
-			fmt.Fprintf(ew.writer, "\tat %s", frame.String())
-			if i < len(st.frames)-1 {
-				fmt.Fprintf(ew.writer, "\n")
-			}
-		}
-	}
-
-}
-
-type lineErrorWriter struct {
-	writer            io.Writer
-	firstErrorPrinted bool
-}
-
-func (ew *lineErrorWriter) Error(msg, metadata, location string, st *stacktrace) {
-	if msg == "" && metadata == "" {
-		return
-	}
-	if ew.firstErrorPrinted {
-		fmt.Fprint(ew.writer, ": ")
-	}
-	if msg != "" {
-		fmt.Fprint(ew.writer, msg)
-		ew.firstErrorPrinted = true
-	}
-	if metadata != "" {
-		if msg != "" {
-			fmt.Fprint(ew.writer, " ")
-		}
-		fmt.Fprint(ew.writer, metadata)
-		ew.firstErrorPrinted = true
-	}
 }
 
 func (e Error) printError(w io.Writer, withLocation bool) {
@@ -297,12 +115,12 @@ func (e Error) printError(w io.Writer, withLocation bool) {
 		var message string = ""
 		var location string = ""
 		var metaMsg string = ""
-		var st *stacktrace
+		var st *Stacktrace
 
-		if metaError, ok := getError(err); ok {
-			message = metaError.Reason()
-			if len(metaError.meta) > 0 {
-				metasStr := make([]string, 0, len(metaError.meta))
+		if metaError, ok := AsMetaError(err); ok {
+			message = metaError.Reason
+			if len(metaError.Metas) > 0 {
+				metasStr := make([]string, 0, len(metaError.Metas))
 				metas := GetMeta(metaError, false)
 				for k, v := range metas {
 					metasStr = append(metasStr, fmt.Sprintf("[%s=%s]", k, strings.Join(v, ",")))
@@ -311,11 +129,11 @@ func (e Error) printError(w io.Writer, withLocation bool) {
 				sort.Strings(metasStr)
 				metaMsg = strings.Join(metasStr, " ")
 			}
-			if withLocation && metaError.location != "" {
-				location = metaError.location
+			if withLocation && metaError.Location != "" {
+				location = metaError.Location
 			}
-			if withLocation && metaError.stacktrace != nil {
-				st = metaError.stacktrace
+			if withLocation && metaError.Stacktrace != nil {
+				st = metaError.Stacktrace
 			}
 		} else {
 			message = err.Error()
@@ -336,29 +154,10 @@ func (e Error) Format(s fmt.State, verb rune) {
 	}
 }
 
-type Option func(*Error)
-
-const defaultCallerSkip = 2
-
-func WithLocationSkip(additionalCallerSkip int) Option {
-	return func(e *Error) {
-		//+1 since this is called from the option
-		e.location = getLocation(additionalCallerSkip + defaultCallerSkip + 1)
-	}
-}
-
-func WithStackTrace(additionalCallerSkip, maxDepth int) Option {
-	return func(e *Error) {
-		//+1 since this is called from the option
-		//+1 because we always skip the first frame since it will be the same as the location
-		e.stacktrace = newStacktrace(additionalCallerSkip+defaultCallerSkip+2, maxDepth)
-	}
-}
-
-func New(reason string, opt ...Option) Error {
+func New(reason string, opt ...Option) error {
 	e := Error{
-		reason:   reason,
-		location: getLocation(defaultCallerSkip),
+		Reason:   reason,
+		Location: getLocation(0),
 	}
 
 	if len(opt) > 0 {
@@ -371,6 +170,62 @@ func New(reason string, opt ...Option) Error {
 }
 
 func getLocation(callerSkip int) string {
-	_, file, line, _ := runtime.Caller(callerSkip)
-	return fmt.Sprintf("%s:%d", file, line)
+	st := newStacktrace(callerSkip, 1)
+	return st.Frames[0].String()
+}
+
+type Stacktrace struct {
+	Frames []Frame
+}
+
+type Frame struct {
+	File string
+	Line int
+}
+
+func (frame *Frame) String() string {
+	return fmt.Sprintf("%v:%v", frame.File, frame.Line)
+}
+
+// Just a struct to be able to get the internal package path of this library to exclude it
+type internal struct{}
+
+var internalPath = reflect.TypeOf(internal{}).PkgPath()
+
+func newStacktrace(frameStackSkip, maxDepth int) *Stacktrace {
+	var frames []Frame
+	var index = 0
+
+	// start by skipping everything related to this package
+	for {
+		_, file, _, _ := runtime.Caller(index)
+		if !strings.Contains(file, internalPath) {
+			break
+		}
+		if !strings.Contains(file, "/builder.go") &&
+			!strings.Contains(file, "/errors.go") &&
+			!strings.Contains(file, "/options.go") {
+			break
+		}
+		index++
+	}
+
+	// We loop until we have StackTraceMaxDepth frames or we run out of frames.
+	// Frames from this package are skipped.
+	for i := index + frameStackSkip; len(frames) < maxDepth; i++ {
+		_, file, line, ok := runtime.Caller(i)
+		//Once we find a frame in the stdlib, we stop, since stdlib code won't call back to user code
+		if !ok || strings.Contains(file, runtime.GOROOT()) {
+			break
+		}
+
+		frames = append(frames, Frame{
+			File: file,
+			Line: line,
+		})
+	}
+
+	return &Stacktrace{
+		Frames: frames,
+	}
 }

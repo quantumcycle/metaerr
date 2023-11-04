@@ -12,10 +12,13 @@ type Builder struct {
 }
 
 func (b Builder) Meta(meta ...ErrorMetadata) Builder {
+	metas := make([]ErrorMetadata, len(b.metas)+len(meta))
+	copy(metas, b.metas)
+	copy(metas[len(b.metas):], meta)
 	return Builder{
 		opts:    b.opts,
 		context: b.context,
-		metas:   append(b.metas, meta...),
+		metas:   meta,
 	}
 }
 
@@ -27,17 +30,14 @@ func (b Builder) Context(ctx context.Context) Builder {
 	}
 }
 
-func (b Builder) Newf(format string, args ...any) Error {
-	return New(fmt.Sprintf(format, args...), b.opts...).WithMeta(b.metas...).WithContext(b.context)
+func (b Builder) Newf(format string, args ...any) error {
+	opts := append(b.opts, WithMeta(b.metas...), WithContext(b.context))
+	return New(fmt.Sprintf(format, args...), opts...)
 }
 
-func (b Builder) Wrapf(err error, format string, args ...any) *Error {
-	w := Wrap(err, fmt.Sprintf(format, args...), b.opts...)
-	if w == nil {
-		return nil
-	}
-	w2 := (*w).WithMeta(b.metas...).WithContext(b.context)
-	return &w2
+func (b Builder) Wrapf(err error, format string, args ...any) error {
+	opts := append(b.opts, WithMeta(b.metas...), WithContext(b.context))
+	return Wrap(err, fmt.Sprintf(format, args...), opts...)
 }
 
 func NewBuilder(opt ...Option) Builder {
