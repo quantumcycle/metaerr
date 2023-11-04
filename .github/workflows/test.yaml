@@ -1,5 +1,5 @@
 name: Test
-on: [pull_request, push]
+on: [push]
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -12,7 +12,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v3
         with:
-          go-version: "1.20"
+          go-version: "1.21"
           go-version-file: ./github.com/quantumcycle/metaerr/go.mod
           cache-dependency-path: ./github.com/quantumcycle/metaerr/go.sum
           cache: true
