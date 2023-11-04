@@ -386,3 +386,13 @@ func TestErrorWithMetaRemovedDuplicateValues(t *testing.T) {
 		"tags": {"tag1", "tag2"},
 	}, meta)
 }
+
+func TestErrorTooManyStackSkipReturnsEmptyLocation(t *testing.T) {
+	a := assert.New(t)
+
+	err := metaerr.New("failure", metaerr.WithLocationSkip(100))
+
+	merr, ok := metaerr.AsMetaError(err)
+	a.True(ok)
+	a.Equal("", merr.Location)
+}
