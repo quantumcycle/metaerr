@@ -174,6 +174,9 @@ func New(reason string, opt ...Option) error {
 
 func getLocation(callerSkip int) string {
 	st := newStacktrace(callerSkip, 1)
+	if len(st.Frames) == 0 {
+		return ""
+	}
 	return st.Frames[0].String()
 }
 
