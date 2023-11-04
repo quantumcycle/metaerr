@@ -11,58 +11,59 @@ import (
 )
 
 // We put these helper here to make sure the line number for all the tests are constant
-func CreateError(reason string, meta map[string][]string) metaerr.Error {
-	err := metaerr.New(reason)
+func CreateError(reason string, meta map[string][]string) error {
+	metas := make([]metaerr.ErrorMetadata, 0, len(meta))
 	for k, values := range meta {
 		for _, val := range values {
-			err = err.WithMeta(metaerr.StringMeta(k)(val))
+			metas = append(metas, metaerr.StringMeta(k)(val))
 		}
 
 	}
-	return err
+
+	return metaerr.New(reason, metaerr.WithMeta(metas...))
 }
 
-func Wrap(err error, reason string) *metaerr.Error {
-	return metaerr.Wrap(err, reason)
+func Wrap(err error, reason string, metas ...metaerr.ErrorMetadata) error {
+	return metaerr.Wrap(err, reason, metaerr.WithMeta(metas...))
 }
 
-func SimulateCreateFromLibrary(reason string) metaerr.Error {
+func SimulateCreateFromLibrary(reason string) error {
 	//We create the error in a function but we want to reported location to be here instead
 	return libraryCreateNew(reason)
 }
 
-func libraryCreateNew(reason string) metaerr.Error {
+func libraryCreateNew(reason string) error {
 	return metaerr.New(reason, metaerr.WithLocationSkip(1))
 }
 
-func SimulateCreateFromLibraryWithStack(reason string) metaerr.Error {
+func SimulateCreateFromLibraryWithStack(reason string) error {
 	//We create the error in a function but we want to reported location to be here instead
 	return libraryCreateNewWithStack(reason)
 }
 
-func libraryCreateNewWithStack(reason string) metaerr.Error {
+func libraryCreateNewWithStack(reason string) error {
 	return metaerr.New(reason, metaerr.WithLocationSkip(1), metaerr.WithStackTrace(1, 3))
 }
 
-func SimulateWrapFromLibrary(err error, reason string) metaerr.Error {
+func SimulateWrapFromLibrary(err error, reason string) error {
 	//We create the error in a function but we want to reported location to be here instead
 	return libraryWrap(err, reason)
 }
 
-func libraryWrap(err error, reason string) metaerr.Error {
-	return *metaerr.Wrap(err, reason, metaerr.WithLocationSkip(1))
+func libraryWrap(err error, reason string) error {
+	return metaerr.Wrap(err, reason, metaerr.WithLocationSkip(1))
 }
 
 // Same as SimulateCreateFromLibraryWithStack, but with an additional stack frame we want to assert on
-func SimulateCreateFromLibraryWithStackLevel2(reason string) metaerr.Error {
+func SimulateCreateFromLibraryWithStackLevel2(reason string) error {
 	return SimulateCreateFromLibraryWithStack(reason)
 }
 
-const createErrorLocation = 15
-const wrapErrorLocation = 26
-const simulateCreateFromLibraryLocation = 31
-const simulateCreateFromLibraryWithStackLocation = 40
-const simulateCreateFromLibraryWithStackLevel2Location = 58
+const createErrorLocation = 23
+const wrapErrorLocation = 27
+const simulateCreateFromLibraryLocation = 32
+const simulateCreateFromLibraryWithStackLocation = 41
+const simulateCreateFromLibraryWithStackLevel2Location = 59
 
 func TestFormatWithoutMeta(t *testing.T) {
 	a := assert.New(t)
@@ -185,10 +186,9 @@ func TestGetMetaReturnsMergeMetaFromWrappedErrors(t *testing.T) {
 		"errorCode": {"code2", "code1"},
 		"tag":       {"not_found"},
 	})
-	wrapped := Wrap(err, "wrapped")
-	wrappedWithMeta := wrapped.WithMeta(metaerr.StringMeta("errorCode")("code3"))
+	wrapped := Wrap(err, "wrapped", metaerr.StringMeta("errorCode")("code3"))
 
-	meta := metaerr.GetMeta(wrappedWithMeta, true)
+	meta := metaerr.GetMeta(wrapped, true)
 
 	a.Equal(map[string][]string{
 		"errorCode": {"code1", "code2", "code3"},
@@ -203,10 +203,9 @@ func TestGetMetaReturnsNonNestedMeta(t *testing.T) {
 		"errorCode": {"code2", "code1"},
 		"tag":       {"not_found"},
 	})
-	wrapped := Wrap(err, "wrapped")
-	wrappedWithMeta := wrapped.WithMeta(metaerr.StringMeta("errorCode")("code3"))
+	wrapped := Wrap(err, "wrapped", metaerr.StringMeta("errorCode")("code3"))
 
-	meta := metaerr.GetMeta(wrappedWithMeta, false)
+	meta := metaerr.GetMeta(wrapped, false)
 
 	a.Equal(map[string][]string{
 		"errorCode": {"code3"},
@@ -226,7 +225,9 @@ func TestGetLocation(t *testing.T) {
 
 	err := CreateError("", nil)
 
-	a.Regexp(fmt.Sprintf(`.+/metaerr/errors_test.go:%d`, createErrorLocation), err.Location())
+	merr, ok := metaerr.AsMetaError(err)
+	a.True(ok)
+	a.Regexp(fmt.Sprintf(`.+/metaerr/errors_test.go:%d`, createErrorLocation), merr.Location)
 }
 
 type MyMetaValue string
@@ -239,7 +240,7 @@ func TestStringerMeta(t *testing.T) {
 	a := assert.New(t)
 
 	meta := metaerr.StringerMeta[MyMetaValue]("mymeta")
-	err := metaerr.New("failure").WithMeta(meta(MetaValue1))
+	err := metaerr.New("failure", metaerr.WithMeta(meta(MetaValue1)))
 
 	errMetaValues := metaerr.GetMeta(err, false)
 
@@ -253,7 +254,7 @@ func TestStringerMetaWithEmptyValue(t *testing.T) {
 	a := assert.New(t)
 
 	meta := metaerr.StringerMeta[MyMetaValue]("mymeta")
-	err := metaerr.New("failure").WithMeta(meta(""))
+	err := metaerr.New("failure", metaerr.WithMeta(meta("")))
 
 	errMetaValues := metaerr.GetMeta(err, false)
 
@@ -265,7 +266,7 @@ func TestStringsMeta(t *testing.T) {
 	a := assert.New(t)
 
 	meta := metaerr.StringsMeta("mymeta")
-	err := metaerr.New("failure").WithMeta(meta("v1", "v2"))
+	err := metaerr.New("failure", metaerr.WithMeta(meta("v1", "v2")))
 
 	errMetaValues := metaerr.GetMeta(err, false)
 
@@ -279,7 +280,7 @@ func TestStringsMetaWithoutValues(t *testing.T) {
 	a := assert.New(t)
 
 	meta := metaerr.StringsMeta("mymeta")
-	err := metaerr.New("failure").WithMeta(meta())
+	err := metaerr.New("failure", metaerr.WithMeta(meta()))
 
 	errMetaValues := metaerr.GetMeta(err, false)
 
@@ -339,8 +340,8 @@ func TestErrorWithMetaFromContextWithValue(t *testing.T) {
 	a := assert.New(t)
 
 	ctx := context.WithValue(context.Background(), "user", "123")
-	userFromCtx := metaerr.StringFromContextMeta("user", "user")
-	err := metaerr.New("failure").WithContext(ctx).WithMeta(userFromCtx())
+	userFromCtx := metaerr.StringMetaFromContext("user", "user")
+	err := metaerr.New("failure", metaerr.WithContext(ctx), metaerr.WithMeta(userFromCtx()))
 
 	meta := metaerr.GetMeta(err, false)
 
@@ -353,8 +354,8 @@ func TestErrorWithMetaFromContextWithoutValue(t *testing.T) {
 	a := assert.New(t)
 
 	ctx := context.Background()
-	userFromCtx := metaerr.StringFromContextMeta("user", "user")
-	err := metaerr.New("failure").WithContext(ctx).WithMeta(userFromCtx())
+	userFromCtx := metaerr.StringMetaFromContext("user", "user")
+	err := metaerr.New("failure", metaerr.WithContext(ctx), metaerr.WithMeta(userFromCtx()))
 
 	meta := metaerr.GetMeta(err, false)
 
@@ -364,8 +365,8 @@ func TestErrorWithMetaFromContextWithoutValue(t *testing.T) {
 func TestErrorWithMetaFromContextWithoutContext(t *testing.T) {
 	a := assert.New(t)
 
-	userFromCtx := metaerr.StringFromContextMeta("user", "user")
-	err := metaerr.New("failure").WithMeta(userFromCtx())
+	userFromCtx := metaerr.StringMetaFromContext("user", "user")
+	err := metaerr.New("failure", metaerr.WithMeta(userFromCtx()))
 
 	meta := metaerr.GetMeta(err, false)
 

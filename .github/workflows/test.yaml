@@ -5,18 +5,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # needed for stacktrace tests
+          path: github.com/quantumcycle/metaerr
 
       - name: Setup Go
         uses: actions/setup-go@v3
         with:
           go-version: "1.20"
+          go-version-file: ./github.com/quantumcycle/metaerr/go.mod
+          cache-dependency-path: ./github.com/quantumcycle/metaerr/go.sum
           cache: true
 
       - name: Test
+        working-directory: ./github.com/quantumcycle/metaerr
         run: go test -covermode=atomic -coverprofile=coverage.out -v ./...
 
       - uses: codecov/codecov-action@v3
         with:
-          files: ./coverage.out
+          working-directory: ./github.com/quantumcycle/metaerr
+          files: ./github.com/quantumcycle/metaerr/coverage.out
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

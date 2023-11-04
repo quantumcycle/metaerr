@@ -7,10 +7,11 @@ import (
 
 var errorCode = metaerr.StringMeta("error_code")
 var tag = metaerr.StringsMeta("tag")
-var userID = metaerr.StringFromContextMeta("user", "user_id")
+var userID = metaerr.StringMetaFromContext("user", "user_id")
 var builder = metaerr.NewBuilder(
-	metaerr.WithLocationSkip(2),
-	metaerr.WithStackTrace(2, 5)).
+	//skipping one caller to exclude this builder from the stacktraces
+	metaerr.WithLocationSkip(1),
+	metaerr.WithStackTrace(1, 5)).
 	//we can add userID immediately since the value comes from the context
 	Meta(userID())
 
@@ -33,10 +34,10 @@ func (b *ErrorBuilder) Tags(tag ...string) *ErrorBuilder {
 	return b
 }
 
-func (b *ErrorBuilder) Errorf(ctx context.Context, format string, args ...any) metaerr.Error {
+func (b *ErrorBuilder) Errorf(ctx context.Context, format string, args ...any) error {
 	return builder.Context(ctx).Meta(errorCode(b.errorCode), tag(b.tags...)).Newf(format, args...)
 }
 
-func (b *ErrorBuilder) Wrapf(ctx context.Context, err error, format string, args ...any) *metaerr.Error {
+func (b *ErrorBuilder) Wrapf(ctx context.Context, err error, format string, args ...any) error {
 	return builder.Context(ctx).Meta(errorCode(b.errorCode), tag(b.tags...)).Wrapf(err, format, args...)
 }

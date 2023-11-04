@@ -22,7 +22,7 @@ func TestBuilderNewWithMeta(t *testing.T) {
 func TestBuilderNewWithContext(t *testing.T) {
 	a := assert.New(t)
 
-	ctxTagMeta := metaerr.StringFromContextMeta("tag", "tag")
+	ctxTagMeta := metaerr.StringMetaFromContext("tag", "tag")
 	builder := metaerr.NewBuilder().Meta(ctxTagMeta())
 
 	ctx := context.WithValue(context.Background(), "tag", "security")
