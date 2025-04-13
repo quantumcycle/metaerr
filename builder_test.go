@@ -35,7 +35,7 @@ func TestBuilderWrapWithMeta(t *testing.T) {
 	a := assert.New(t)
 
 	tagMeta := metaerr.StringMeta("tags")
-	builder := metaerr.NewBuilder().Meta(tagMeta("security"), tagMeta("db"))
+	builder := metaerr.NewBuilder().Meta(tagMeta("security")).Meta(tagMeta("db"))
 
 	err := builder.Wrapf(errors.New("failure"), "wrapped")
 

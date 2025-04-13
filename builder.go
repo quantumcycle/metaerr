@@ -18,7 +18,7 @@ func (b Builder) Meta(meta ...ErrorMetadata) Builder {
 	return Builder{
 		opts:    b.opts,
 		context: b.context,
-		metas:   meta,
+		metas:   metas,
 	}
 }
 
