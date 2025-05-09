@@ -30,9 +30,19 @@ func (b Builder) Context(ctx context.Context) Builder {
 	}
 }
 
+func (b Builder) New(msg string) error {
+	opts := append(b.opts, WithMeta(b.metas...), WithContext(b.context))
+	return New(msg, opts...)
+}
+
 func (b Builder) Newf(format string, args ...any) error {
 	opts := append(b.opts, WithMeta(b.metas...), WithContext(b.context))
 	return New(fmt.Sprintf(format, args...), opts...)
+}
+
+func (b Builder) Wrap(err error, msg string) error {
+	opts := append(b.opts, WithMeta(b.metas...), WithContext(b.context))
+	return Wrap(err, msg, opts...)
 }
 
 func (b Builder) Wrapf(err error, format string, args ...any) error {
