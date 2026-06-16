@@ -3,6 +3,7 @@ package metaerr
 import (
 	"bytes"
 	"context"
+	"errors"
 	stderr "errors"
 	"fmt"
 	"io"
@@ -89,6 +90,14 @@ type Error struct {
 
 func (e Error) Unwrap() error {
 	return e.Cause
+}
+
+func (e Error) Is(target error) bool {
+	if e.Reason == target.Error() {
+		return true
+	}
+
+	return errors.Is(e.Cause, target)
 }
 
 func (e Error) Error() string {
