@@ -20,7 +20,7 @@ func Wrap(err error, msg string, opt ...Option) error {
 
 	e := Error{
 		Reason:   msg,
-		Location: getLocation(0),
+		Location: getLocation(0, nil),
 		Cause:    err,
 	}
 
@@ -80,6 +80,11 @@ type Error struct {
 	Stacktrace *Stacktrace
 	Cause      error
 	Metas      []ErrorMetadata
+	// rootDetector classifies whether an import path is a stack-terminating
+	// "root" package (stdlib/runtime). nil means DefaultRootPackage. Set via
+	// WithRootPackageDetector; must be applied before WithLocationSkip /
+	// WithStackTrace to take effect (those capture eagerly).
+	rootDetector func(pkg string) bool
 }
 
 func (e Error) Unwrap() error {
@@ -160,7 +165,7 @@ func (e Error) Format(s fmt.State, verb rune) {
 func New(reason string, opt ...Option) error {
 	e := Error{
 		Reason:   reason,
-		Location: getLocation(0),
+		Location: getLocation(0, nil),
 	}
 
 	if len(opt) > 0 {
@@ -172,8 +177,8 @@ func New(reason string, opt ...Option) error {
 	return e
 }
 
-func getLocation(callerSkip int) string {
-	st := newStacktrace(callerSkip, 1)
+func getLocation(callerSkip int, isRoot func(pkg string) bool) string {
+	st := newStacktrace(callerSkip, 1, isRoot)
 	if len(st.Frames) == 0 {
 		return ""
 	}
@@ -198,7 +203,10 @@ type internal struct{}
 
 var internalPath = reflect.TypeOf(internal{}).PkgPath()
 
-func newStacktrace(frameStackSkip, maxDepth int) *Stacktrace {
+func newStacktrace(frameStackSkip, maxDepth int, isRoot func(pkg string) bool) *Stacktrace {
+	if isRoot == nil {
+		isRoot = DefaultRootPackage
+	}
 	var frames []Frame
 	var index = 0
 
@@ -216,12 +224,21 @@ func newStacktrace(frameStackSkip, maxDepth int) *Stacktrace {
 		index++
 	}
 
-	// We loop until we have StackTraceMaxDepth frames or we run out of frames.
-	// Frames from this package are skipped.
+	// Collect frames up to maxDepth, stopping once we reach the stdlib/runtime
+	// (it won't call back into user code).
+	//
+	// We always keep the FIRST frame and only apply the stdlib check from the
+	// second one on. The first frame is the site that created the error, which is
+	// user code by construction (the stdlib never calls into metaerr). This makes
+	// the worst case graceful: the root classifier can misclassify user code in
+	// a domain-less module (see DefaultRootPackage), and without this guard such
+	// a frame would be dropped, leaving an empty stack / location.
 	for i := index + frameStackSkip; len(frames) < maxDepth; i++ {
-		_, file, line, ok := runtime.Caller(i)
-		//Once we find a frame in the stdlib, we stop, since stdlib code won't call back to user code
-		if !ok || strings.Contains(file, runtime.GOROOT()) {
+		pc, file, line, ok := runtime.Caller(i)
+		if !ok {
+			break
+		}
+		if len(frames) > 0 && isRootFrame(pc, isRoot) {
 			break
 		}
 
@@ -234,4 +251,53 @@ func newStacktrace(frameStackSkip, maxDepth int) *Stacktrace {
 	return &Stacktrace{
 		Frames: frames,
 	}
+}
+
+// packageOf returns the import path of the package a fully-qualified function
+// name belongs to.
+//
+//	"net/http.(*conn).serve"              -> "net/http"
+//	"runtime.main"                        -> "runtime"
+//	"github.com/quantumcycle/metaerr.New" -> "github.com/quantumcycle/metaerr"
+func packageOf(funcName string) string {
+	// The function/method part starts at the first '.' that follows the last '/'.
+	if slash := strings.LastIndexByte(funcName, '/'); slash >= 0 {
+		if dot := strings.IndexByte(funcName[slash:], '.'); dot >= 0 {
+			return funcName[:slash+dot]
+		}
+		return funcName
+	}
+	if dot := strings.IndexByte(funcName, '.'); dot >= 0 {
+		return funcName[:dot]
+	}
+	return funcName
+}
+
+func isRootFrame(pc uintptr, isRoot func(pkg string) bool) bool {
+	fn := runtime.FuncForPC(pc)
+	if fn == nil {
+		return false
+	}
+	return isRoot(packageOf(fn.Name()))
+}
+
+// DefaultRootPackage is the default root-package classifier, used when none is
+// configured via WithRootPackageDetector. It reports whether an import path
+// belongs to the standard library or runtime — i.e. where stack capture stops.
+//
+// Stdlib import paths have no domain (no '.') in their first
+// path segment ("runtime", "net/http", "testing"), whereas conventional module
+// paths do ("github.com/...", "golang.org/x/..."). This is not fullproof.
+// Modules declared with a domain-less path (e.g. `go mod init myapp` → "myapp",
+// "internal/foo") are indistinguishable from the stdlib by this rule and are
+// classified as a root.
+func DefaultRootPackage(pkg string) bool {
+	if pkg == "main" {
+		return false
+	}
+	first := pkg
+	if slash := strings.IndexByte(pkg, '/'); slash >= 0 {
+		first = pkg[:slash]
+	}
+	return !strings.Contains(first, ".")
 }
